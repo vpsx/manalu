@@ -1,0 +1,5 @@
+LOCATION PERMISSIONS:
+It seems there are some hairy things with location permissions
+on iOS. So if in future there are problems with location and they
+are iOS-specific, consult the expo-permissions docs in the expo
+API reference.
