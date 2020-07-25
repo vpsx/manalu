@@ -9,12 +9,24 @@ const axios = require('axios');
 console.log("Sanity check check check check");
 
 
-function useLocation() {
-  // custom Hook to keep track of own location using expo Location
+export default function App() {
   const [location, setLocation] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
 
+  // TODO better names needed esp when have both beacon and uh.. radar
+  const [timer, setTimer] = useState(null);
+  const [beaconStatusMsg, setBeaconStatusMsg] = useState(null);
+
+  // Effect for getting device location
   useEffect(() => {
+    // I think this async code, when run inside an Effect on a custom Hook
+    // that returns a non-component, causes a warning "Can't perform a React
+    // state update on an unmounted component". I guess the component(?!?!)
+    // gets mounted THEN this code is run (or starts to run) THEN component is
+    // unmounted THEN it tries to setLocation on the component and dies?
+    // I can't just make it not async;
+    // I can hack it by returning a <Text> (so, keep it mounted.. right?);
+    // Or I can just move this effect higher up into the App component...
     (async () => {
       let { status } = await Location.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -25,7 +37,6 @@ function useLocation() {
       setLocation(location);
     })();
   });
-
   let locationText = 'Waiting for location...';
   if (errorMsg) {
     locationText = errorMsg;
@@ -33,41 +44,45 @@ function useLocation() {
     locationText = JSON.stringify(location);
   }
 
-  // TODO don't actually want to return a string
-  return <Text>{locationText}</Text>;
-}
 
-
-
-export default function App() {
-  // TODO better names needed esp when have both beacon and uh.. radar
-  const [timer, setTimer] = useState(null);
-
+  // Effect for sending device location to Paoloserver on an Interval
   useEffect(() => {
     function updateLocation() {
       // Since this fn is needed by my effect, I should declare it inside the effect:
       // https://reactjs.org/docs/hooks-faq.html#is-it-safe-to-omit-functions-from-the-list-of-dependencies
-      console.log("Do the Axios thing! POST location.");
+      console.log("Running updateLocation hook:");
+      if (location) {
+        console.log("Location is: ")
+        console.log(location)
+        let date = new Date()
 
-      axios.post('http://192.168.1.8:5000/givelocation', {
-        Name: "manalu-test",
-        Timestamp: new Date(),
-        Latitude: 1,
-        Longitude: 1,
-      })
-      .then(function(response) {
-        console.log("GIVELOCATION response:")
-        console.log(response.data);
-      })
-      .catch(function(error) {
-        console.log(error);
-      });
+        axios.post('http://192.168.1.8:5000/givelocation', {
+          Name: "manalu-test",
+          Timestamp: date, //TODO: Or use location timestamp? But format
+          Latitude: location.coords.latitude,
+          Longitude: location.coords.longitude,
+        })
+        .then(function(response) {
+          console.log("GIVELOCATION response:")
+          console.log(response.data);
+          setBeaconStatusMsg("Last posted to Paoloserver at " + date)
+        })
+        .catch(function(error) {
+          console.log(error);
+          setBeaconStatusMsg("Something went wrong when posting to Paoloserver: " + error)
+        });
+
+      } else {
+        let noLocationMsg = "Location was null. Problemos. Didn't POST to Paoloserver."
+        setBeaconStatusMsg(noLocationMsg)
+        console.log(noLocationMsg)
+      }
     }
 
     setTimer(setInterval(
       () => updateLocation(),
-      //1000,
-      60000,
+      10000,
+      //60000,
     ));
     return () => {
       clearInterval(timer);
@@ -90,7 +105,8 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      {useLocation()}
+      <Text>{locationText}</Text>
+      <Text>{beaconStatusMsg}</Text>
     </View>
   );
 }
