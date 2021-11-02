@@ -3,21 +3,25 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import * as Location from 'expo-location';
 
-// someday I will maybe understand imports vs requires wtf
-const axios = require('axios');
 
-console.log("Sanity check check check check");
+// For now, enter the IP address+port where local/dev Paoloserver is running
+// Todo: Make this configurable, and also point it to Paoloserver proper
+const ws = new WebSocket('');
+
+ws.addEventListener('open', function (event) {
+    console.log("WebSockets client sending a sanity check from Manalu");
+    ws.send('WebSockets client sending a sanity check from Manalu');
+});
+ws.addEventListener('message', function (event) {
+    console.log('WebSockets Manalu client received: %s', event.data);
+});
+
 
 
 export default function App() {
   const [location, setLocation] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // TODO better names needed esp when have both beacon and uh.. radar
-  const [timer, setTimer] = useState(null);
-  const [beaconStatusMsg, setBeaconStatusMsg] = useState(null);
-
-  // Effect for getting device location
   useEffect(() => {
     // I think this async code, when run inside an Effect on a custom Hook
     // that returns a non-component, causes a warning "Can't perform a React
@@ -28,9 +32,21 @@ export default function App() {
     // I can hack it by returning a <Text> (so, keep it mounted.. right?);
     // Or I can just move this effect higher up into the App component...
     (async () => {
-      let { status } = await Location.requestPermissionsAsync();
-      if (status !== 'granted') {
-        setErrorMsg('No permission to access device location');
+      // App needs foreground permissions before it can request background permissions.
+      // * If you are having problems where the app is not asking for permissions,
+      //   you may need to reinstall Expo Go entirely; it's an OS level restriction on apps
+      //   (in particular how many times it is allowed to prompt for permissions).
+      // * NB: Expo docs use "Destructuring Assignment".
+      let fgpermissions = await Location.requestForegroundPermissionsAsync();
+      if ( fgpermissions["status"] !== 'granted') {
+        setErrorMsg('No permission to access device location (Foreground)');
+        return;
+      }
+
+      let bgpermissions = await Location.requestBackgroundPermissionsAsync();
+      if ( bgpermissions["status"] !== 'granted') {
+        setErrorMsg('No permission to access device location (Background)');
+        return;
       }
 
       let location = await Location.getCurrentPositionAsync({});
@@ -41,72 +57,53 @@ export default function App() {
   if (errorMsg) {
     locationText = errorMsg;
   } else if (location) {
-    locationText = JSON.stringify(location);
+    //locationText = JSON.stringify(location);
+    locationText = "LAT: " + JSON.stringify(location.coords.latitude) + "\nLNG: " + JSON.stringify(location.coords.longitude) + "\nHDG: " + JSON.stringify(location.coords.heading);
+
+    //ws.send("LAT = " + JSON.stringify(location.coords.latitude));
+    //ws.send("LNG = " + JSON.stringify(location.coords.longitude));
+    //ws.send("HDG = " + JSON.stringify(location.coords.heading));
+    ws.send(JSON.stringify(location));
   }
 
 
-  // Effect for sending device location to Paoloserver on an Interval
-  useEffect(() => {
-    function updateLocation() {
-      // Since this fn is needed by my effect, I should declare it inside the effect:
-      // https://reactjs.org/docs/hooks-faq.html#is-it-safe-to-omit-functions-from-the-list-of-dependencies
-      console.log("Running updateLocation hook:");
-      if (location) {
-        console.log("Location is: ")
-        console.log(location)
-        let date = new Date()
-
-        axios.post('http://192.168.1.8:5000/givelocation', {
-          Name: "manalu-test",
-          Timestamp: date, //TODO: Or use location timestamp? But format
-          Latitude: location.coords.latitude,
-          Longitude: location.coords.longitude,
-        })
-        .then(function(response) {
-          console.log("GIVELOCATION response:")
-          console.log(response.data);
-          setBeaconStatusMsg("Last posted to Paoloserver at " + date)
-        })
-        .catch(function(error) {
-          console.log(error);
-          setBeaconStatusMsg("Something went wrong when posting to Paoloserver: " + error)
-        });
-
-      } else {
-        let noLocationMsg = "Location was null. Problemos. Didn't POST to Paoloserver."
-        setBeaconStatusMsg(noLocationMsg)
-        console.log(noLocationMsg)
-      }
-    }
-
-    setTimer(setInterval(
-      () => updateLocation(),
-      10000,
-      //60000,
-    ));
-    return () => {
-      clearInterval(timer);
-    };
-  },
-  // The React docs discuss conditional effect firing only in terms of optimization.
+  // Once upon a time, there was code to send the location to the Paoloserver
+  // on an interval, using setInterval inside an Effect.
+  // This Effect was written with an empty list of dependencies
+  //   useEffect(() => { blah, [] });
+  // so that it only ran once, on component mount, and not after every render.
+  // This prevented the Interval from being reset every render.
+  // However, the Effect was not _actually_ dependency-free: Obviously it
+  // needed the location! If 'location' is not declared in the dependencies,
+  // then the value of 'location' inside the Effect is always null.
+  // Compare and see:
+  //   1. Pass [] as dependencies and print location inside the Effect;
+  //      the Effect runs once and the location is null. (Note: The EFFECT
+  //      runs once; the interval function runs on an interval as expected,
+  //      though with the location null.
+  //   2. Pass [location] as dependencies and print location inside the Effect;
+  //      the Effect runs many times (on render) and the location is available.
+  //      Set interval to (say) 5000ms; then the interval function does not run.
+  //      Set interval to (say) 100ms, "overtaking" the render rate;
+  //      then you can see the interval function run too, and it has access to
+  //      the location; however, the interval is not actually 100ms because
+  //      it keeps getting reset when the Effect runs and returns.
+  // See related docs here:
+  // https://reactjs.org/docs/hooks-faq.html#what-can-i-do-if-my-effect-dependencies-change-too-often
+  // and
   // https://reactjs.org/docs/hooks-reference.html#conditionally-firing-an-effect
-  // But since this is an Interval, it can only make sense to not reset it on
-  // each render, right? It is not a matter of optimization.
-  // And I am quite sure it is not the case that you aren't supposed to setInterval
-  // in an Effect hook--Hooks purport to cover all the use cases for classes,
-  // which includes the lifecycle methods, and setInterval is definitely done in those.
-  // https://reactjs.org/docs/hooks-faq.html#do-hooks-cover-all-use-cases-for-classes
-  // For this reason I am suspicious about this.
-  // Anyway, whatever, this empty array basically says run effect only on mount, not upd.
-  // Oh also TODO: When you actually use the beacon location instead of dummy coords,
-  // will this need to change......
-  [],
-  );
+  // So what to do?
+  // With the old approach (Axios and HTTP) I would probably have to figure out
+  // some way to set up a timer once and only once, maybe without using an Effect,
+  // in some way as to make the location actually available when this happens.
+  // However since I am now also trying to switch to WebSockets,
+  // which I hope will eliminate the need for the interval entirely,
+  // I am going to defer this problem until it actually proves to be a problem.
+
 
   return (
     <View style={styles.container}>
       <Text>{locationText}</Text>
-      <Text>{beaconStatusMsg}</Text>
     </View>
   );
 }
