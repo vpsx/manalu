@@ -43,11 +43,16 @@ export default function App() {
         return;
       }
 
-      let bgpermissions = await Location.requestBackgroundPermissionsAsync();
-      if ( bgpermissions["status"] !== 'granted') {
-        setErrorMsg('No permission to access device location (Background)');
-        return;
-      }
+      // 2021.11.02 Very fresh new problem with location permissions--
+      // basically Expo Go stopped adding ACCESS_BACKGROUND_LOCATION to
+      // the AndroidManifest even when it's specified in app.json.
+      // https://github.com/expo/expo/issues/14774#issuecomment-954706864
+      // Issue ongoing. Will just comment out for now; only affects bg updates
+      //let bgpermissions = await Location.requestBackgroundPermissionsAsync();
+      //if ( bgpermissions["status"] !== 'granted') {
+      //  setErrorMsg('No permission to access device location (Background)');
+      //  return;
+      //}
 
       let location = await Location.getCurrentPositionAsync({});
       setLocation(location);
