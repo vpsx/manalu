@@ -5,8 +5,9 @@ import * as Location from 'expo-location';
 
 
 // For now, enter the IP address+port where local/dev Paoloserver is running
-// Todo: Make this configurable, and also point it to Paoloserver proper
-const ws = new WebSocket('');
+//const ws = new WebSocket('ws://x.x.x.x:yyyy');
+// Todo: Make this configurable
+const ws = new WebSocket('ws://whereispaolo.org:8080');
 
 ws.addEventListener('open', function (event) {
     console.log("WebSockets client sending a sanity check from Manalu");
@@ -65,10 +66,10 @@ export default function App() {
     //locationText = JSON.stringify(location);
     locationText = "LAT: " + JSON.stringify(location.coords.latitude) + "\nLNG: " + JSON.stringify(location.coords.longitude) + "\nHDG: " + JSON.stringify(location.coords.heading);
 
-    //ws.send("LAT = " + JSON.stringify(location.coords.latitude));
-    //ws.send("LNG = " + JSON.stringify(location.coords.longitude));
-    //ws.send("HDG = " + JSON.stringify(location.coords.heading));
-    ws.send(JSON.stringify(location));
+    if (ws.readyState === 1) {
+      //console.log(`Sending location to server: ${JSON.stringify(location)}`);
+      ws.send(JSON.stringify(location));
+    }
   }
 
 
