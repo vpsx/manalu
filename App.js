@@ -8,6 +8,7 @@ import * as Location from 'expo-location';
 //const ws = new WebSocket('ws://x.x.x.x:yyyy');
 // Todo: Make this configurable
 const ws = new WebSocket('ws://whereispaolo.org:8080');
+const locSendIntervalMs = 500 //milliseconds
 
 ws.addEventListener('open', function (event) {
     console.log("WebSockets client sending a sanity check from Manalu");
@@ -22,6 +23,7 @@ ws.addEventListener('message', function (event) {
 export default function App() {
   const [location, setLocation] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [locLastSend, setLocLastSend] = useState(null);
 
   useEffect(() => {
     // I think this async code, when run inside an Effect on a custom Hook
@@ -66,45 +68,14 @@ export default function App() {
     //locationText = JSON.stringify(location);
     locationText = "LAT: " + JSON.stringify(location.coords.latitude) + "\nLNG: " + JSON.stringify(location.coords.longitude) + "\nHDG: " + JSON.stringify(location.coords.heading);
 
-    if (ws.readyState === 1) {
+    // Send location to Paoloserver on an interval
+    now = Date.now()
+    if ((ws.readyState === 1) && (locLastSend + locSendIntervalMs < now)) {
       //console.log(`Sending location to server: ${JSON.stringify(location)}`);
       ws.send(JSON.stringify(location));
+      setLocLastSend(now)
     }
   }
-
-
-  // Once upon a time, there was code to send the location to the Paoloserver
-  // on an interval, using setInterval inside an Effect.
-  // This Effect was written with an empty list of dependencies
-  //   useEffect(() => { blah, [] });
-  // so that it only ran once, on component mount, and not after every render.
-  // This prevented the Interval from being reset every render.
-  // However, the Effect was not _actually_ dependency-free: Obviously it
-  // needed the location! If 'location' is not declared in the dependencies,
-  // then the value of 'location' inside the Effect is always null.
-  // Compare and see:
-  //   1. Pass [] as dependencies and print location inside the Effect;
-  //      the Effect runs once and the location is null. (Note: The EFFECT
-  //      runs once; the interval function runs on an interval as expected,
-  //      though with the location null.
-  //   2. Pass [location] as dependencies and print location inside the Effect;
-  //      the Effect runs many times (on render) and the location is available.
-  //      Set interval to (say) 5000ms; then the interval function does not run.
-  //      Set interval to (say) 100ms, "overtaking" the render rate;
-  //      then you can see the interval function run too, and it has access to
-  //      the location; however, the interval is not actually 100ms because
-  //      it keeps getting reset when the Effect runs and returns.
-  // See related docs here:
-  // https://reactjs.org/docs/hooks-faq.html#what-can-i-do-if-my-effect-dependencies-change-too-often
-  // and
-  // https://reactjs.org/docs/hooks-reference.html#conditionally-firing-an-effect
-  // So what to do?
-  // With the old approach (Axios and HTTP) I would probably have to figure out
-  // some way to set up a timer once and only once, maybe without using an Effect,
-  // in some way as to make the location actually available when this happens.
-  // However since I am now also trying to switch to WebSockets,
-  // which I hope will eliminate the need for the interval entirely,
-  // I am going to defer this problem until it actually proves to be a problem.
 
 
   return (
