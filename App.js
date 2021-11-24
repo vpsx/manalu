@@ -65,8 +65,13 @@ export default function App() {
   if (errorMsg) {
     locationText = errorMsg;
   } else if (location) {
-    //locationText = JSON.stringify(location);
-    locationText = "LAT: " + JSON.stringify(location.coords.latitude) + "\nLNG: " + JSON.stringify(location.coords.longitude) + "\nHDG: " + JSON.stringify(location.coords.heading);
+    locationText = `
+LAT: ${JSON.stringify(location.coords.latitude)}
+LNG: ${JSON.stringify(location.coords.longitude)}
+HDG: ${JSON.stringify(location.coords.heading)}
+ACC: ${JSON.stringify(location.coords.accuracy)}
+TME: ${new Date(location.timestamp).toLocaleString()}
+`
 
     // Send location to Paoloserver on an interval
     now = Date.now()
