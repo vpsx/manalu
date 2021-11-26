@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 
 
@@ -8,7 +9,7 @@ import * as Location from 'expo-location';
 //const ws = new WebSocket('ws://x.x.x.x:yyyy');
 // Todo: Make this configurable
 const ws = new WebSocket('ws://whereispaolo.org:8080');
-const locSendIntervalMs = 500 //milliseconds
+const locSendIntervalMs = 400 //milliseconds
 
 ws.addEventListener('open', function (event) {
     console.log("WebSockets client sending a sanity check from Manalu");
@@ -16,6 +17,23 @@ ws.addEventListener('open', function (event) {
 });
 ws.addEventListener('message', function (event) {
     console.log('WebSockets Manalu client received: %s', event.data);
+});
+
+
+const LOCATION_TASK_NAME = 'background-location-task';
+
+TaskManager.defineTask(LOCATION_TASK_NAME, ({ data: { locations }, error }) => {
+  if (error) {
+    console.log(`Error in bg location task: ${error.message}`);
+    return;
+  }
+  if (locations) {
+    //console.log(`Background task received locations: ${JSON.stringify(locations[0])}`);
+    if (ws.readyState === 1) {
+      console.log(`Sending location to server: ${JSON.stringify(locations[0])}`);
+      ws.send(JSON.stringify(locations[0]));
+    }
+  }
 });
 
 
@@ -56,10 +74,23 @@ export default function App() {
       //  setErrorMsg('No permission to access device location (Background)');
       //  return;
       //}
+      // Update: Actually, I think you can get around this ^ by using
+      // the foregroundService option as follows.
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: locSendIntervalMs,
+        distanceInterval: 0,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: "Manalu is tracking your location...",
+          notificationBody: "...and sending it to the Paoloserver!",
+          notificationColor: "#ffb6ce",
+        },
+      });
 
       let location = await Location.getCurrentPositionAsync(
         {
-          "accuracy": Location.Accuracy.BestForNavigation
+          accuracy: Location.Accuracy.BestForNavigation
         }
       );
       setLocation(location);
@@ -77,13 +108,13 @@ ACC: ${JSON.stringify(location.coords.accuracy)}
 TME: ${new Date(location.timestamp).toLocaleString()}
 `
 
-    // Send location to Paoloserver on an interval
-    now = Date.now()
-    if ((ws.readyState === 1) && (locLastSend + locSendIntervalMs < now)) {
-      //console.log(`Sending location to server: ${JSON.stringify(location)}`);
-      ws.send(JSON.stringify(location));
-      setLocLastSend(now)
-    }
+    //// Send location to Paoloserver on an interval
+    //now = Date.now()
+    //if ((ws.readyState === 1) && (locLastSend + locSendIntervalMs < now)) {
+    //  //console.log(`Sending location to server: ${JSON.stringify(location)}`);
+    //  ws.send(JSON.stringify(location));
+    //  setLocLastSend(now)
+    //}
   }
 
 
